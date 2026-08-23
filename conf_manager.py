@@ -150,7 +150,7 @@ class ConfManager:
             self.cfg = self.dict_to_namespace(get_example_config())
             return
 
-        self.project_root = Path(__file__).resolve().parent
+        self.project_root = Path(__file__).resolve().parent.parent
         self.dir_name = self.project_root.name
         self.BASE_DIR = Path.home() / 'Documents' / self.dir_name
         self.AGENTS_DIR = self.BASE_DIR / 'agents'
