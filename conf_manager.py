@@ -162,7 +162,7 @@ class ConfManager:
         yaml_data = self._load_yaml()
         self.cfg = self.dict_to_namespace(yaml_data)
         self.cfg.agents = self._load_agents()
-        self.cfg.project_dir = str(self.project_root)
+        self.cfg.project_dir = self.project_root
         self.cfg.config_dir = self.BASE_DIR
         self.cfg.lanip = Utils.get_local_ip()
 
