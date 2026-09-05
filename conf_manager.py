@@ -249,7 +249,7 @@ class LocalFilesFilter(logging.Filter):
     def __init__(self):
         super().__init__()
         self.local_files = set()
-        root_dir = Path(__file__).resolve().parent
+        root_dir = Path(__file__).resolve().parent.parent
         for path in root_dir.rglob('*.py'):
             if '__pycache__' in path.parts:
                 continue
