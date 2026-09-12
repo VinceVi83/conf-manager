@@ -2,7 +2,9 @@ import sys
 import logging
 import yaml
 import shutil
+from enum import Enum
 from pathlib import Path
+
 project_root = Path(__file__).parent.parent
 if (project_root / 'config_example.yaml').exists():
     from .utils import Utils
@@ -11,6 +13,21 @@ else:
 from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
+
+class ReturnCode(Enum):
+    SUCCESS = 1
+    ERR = 2
+    ERR_NOT_CONNECTED = 3
+    ERR_NOT_IMPLEMENTED = 4
+    SUCCESS_NOTHING_TO_DO = 5
+    ERR_UNKNOWN_DEVICE = 6
+    ERR_INVALID_ARGUMENT = 7
+    ERR_NOT_CONFIGURED = 8
+    ERR_MISSING_FILE = 9
+    SUCCESS_NONSENSE = 10
+    NULL = 11
+    DUPLICATE = 12
+    ERR_FILE_NOT_FOUND = 13
 
 class CfgConfig(SimpleNamespace):
     """
@@ -124,6 +141,24 @@ class CfgConfig(SimpleNamespace):
     def get(self, key, default=None):
         return getattr(self, key, default)
 
+    def display(self, indent=0):
+        import json
+        from pathlib import Path
+        
+        def make_serializable(obj):
+            if isinstance(obj, Path):
+                return str(obj)
+            elif isinstance(obj, (CfgConfig, SimpleNamespace)):
+                return {k: make_serializable(v) for k, v in vars(obj).items()}
+            elif isinstance(obj, list):
+                return [make_serializable(item) for item in obj]
+            elif isinstance(obj, dict):
+                return {k: make_serializable(v) for k, v in obj.items()}
+            return obj
+        
+        serializable = make_serializable(self.to_dict())
+        print(json.dumps(serializable, indent=2, ensure_ascii=False))
+
 
 class ConfManager:
     """
@@ -158,36 +193,138 @@ class ConfManager:
         self.template_config = self.project_root / 'config_example.yaml'
         self.template_agents = self.project_root / 'agents'
 
+        self.replacements = {}
         self._setup_files()
+        self._update_configs_and_agents()
         yaml_data = self._load_yaml()
         self.cfg = self.dict_to_namespace(yaml_data)
+        self._load_user_configs()
+        self.cfg.replacements = self.replacements
         self.cfg.agents = self._load_agents()
         self.cfg.project_dir = self.project_root
         self.cfg.config_dir = self.BASE_DIR
         self.cfg.lanip = Utils.get_local_ip()
+        self.cfg.RETURN_CODE = ReturnCode
+
+    def _merge_all_configs(self):
+        merged_config = {}
+
+        if self.CONFIG_FILE.exists():
+            with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                merged_config = yaml.safe_load(f) or {}
+
+        if self.template_config.exists():
+            with open(self.template_config, 'r', encoding='utf-8') as f:
+                template_config = yaml.safe_load(f) or {}
+            for key, value in template_config.items():
+                if key not in merged_config:
+                    merged_config[key] = value
+
+        for config_file in self.project_root.rglob('config_example.yaml'):
+            if config_file == self.template_config:
+                continue
+
+            rel_path = config_file.relative_to(self.project_root)
+            if 'template' in str(rel_path):
+                continue
+
+            parts = list(rel_path.parts)
+            parent_name = parts[-2] if len(parts) >= 2 else "root"
+
+            with open(config_file, 'r', encoding='utf-8') as f:
+                plugin_config = yaml.safe_load(f) or {}
+
+            if parent_name not in merged_config:
+                merged_config[parent_name] = {}
+            for key, value in plugin_config.items():
+                if key not in merged_config[parent_name]:
+                    merged_config[parent_name][key] = value
+
+        new_content = yaml.dump(merged_config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        if self.CONFIG_FILE.exists():
+            with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                existing_content = f.read()
+            if new_content.strip() == existing_content.strip():
+                return
+        with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+    def _copy_all_agents(self):
+        self.AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        for agents_dir in self.project_root.rglob('agents'):
+            if not agents_dir.is_dir():
+                continue
+
+            rel_path = agents_dir.relative_to(self.project_root)
+            if 'template' in str(rel_path):
+                continue
+
+            parts = list(rel_path.parts)
+
+            if len(parts) == 1 and parts[0] == 'agents':
+                prefix = ''
+            elif len(parts) >= 2 and parts[-1] == 'agents':
+                prefix = parts[-2] + '_'
+            else:
+                prefix = 'unknown_'
+
+            for item in agents_dir.iterdir():
+                if item.is_file() and item.suffix == '.md':
+                    new_name = prefix + item.name
+                    shutil.copy2(item, self.AGENTS_DIR / new_name)
+                elif item.is_dir():
+                    new_dir_name = prefix + item.name
+                    shutil.copytree(item, self.AGENTS_DIR / new_dir_name)
+
+    def _load_user_configs(self):
+        users_dir = self.BASE_DIR / 'users'
+        if users_dir.exists():
+            for yaml_file in users_dir.glob('*.yaml'):
+                user_name = yaml_file.stem
+                with open(yaml_file, 'r', encoding='utf-8') as f:
+                    user_config = yaml.safe_load(f) or {}
+                setattr(self.cfg, user_name, self.dict_to_namespace(user_config))
+
+        for yaml_file in self.project_root.rglob('user_config.yaml'):
+            user_name = yaml_file.stem
+
+            with open(yaml_file, 'r', encoding='utf-8') as f:
+                user_config = yaml.safe_load(f) or {}
+            setattr(self.cfg, user_name, self.dict_to_namespace(user_config))
+
+    def _update_configs_and_agents(self):
+        self._merge_all_configs()
+        self._copy_all_agents()
+        self._copy_user_configs()
+
+    def _copy_user_configs(self):
+        users_dir = self.BASE_DIR / 'users'
+        users_dir.mkdir(parents=True, exist_ok=True)
+
+        for yaml_file in self.project_root.rglob('user_config.yaml'):
+            if 'template' in str(yaml_file.relative_to(self.project_root)):
+                continue
+            dest = users_dir / yaml_file.name
+            shutil.copy2(yaml_file, dest)
 
     def _setup_files(self):
         if not self.BASE_DIR.exists():
             self.BASE_DIR.mkdir(parents=True, exist_ok=True)
-            if self.template_config.exists():
-                shutil.copy(self.template_config, self.CONFIG_FILE)
-                logger.info(f'Config copied from template to {self.CONFIG_FILE}')
-            else:
-                self._create_default_config()
-                logger.info(f'Default config created in {self.CONFIG_FILE}')
-            if self.template_agents.exists():
-                shutil.copytree(self.template_agents, self.AGENTS_DIR)
-                logger.info(f'Agents copied from template to {self.AGENTS_DIR}')
-            else:
-                self.AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        users_dir = self.BASE_DIR / 'users'
+        users_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.CONFIG_FILE.exists():
-            if self.template_config.exists():
-                shutil.copy(self.template_config, self.CONFIG_FILE)
-                logger.info(f'Config copied from template to {self.CONFIG_FILE}')
+            config_files_exist = any(
+                f.name == 'config_example.yaml'
+                for f in self.project_root.rglob('*')
+            )
+            if config_files_exist:
+                self._update_configs_and_agents()
             else:
                 self._create_default_config()
-                logger.info(f'Default config created in {self.CONFIG_FILE}')
+                self._update_configs_and_agents()
 
     def _create_default_config(self):
         default_config_dict = {
@@ -219,17 +356,45 @@ class ConfManager:
 
     def _load_yaml(self):
         with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f) or {}
+            data = yaml.safe_load(f) or {}
+        self._extract_replacements(data)
+        return data
+
+    def _extract_replacements(self, data):
+        self.replacements = {}
+        self._collect_replacements(data)
+
+    def _collect_replacements(self, data):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if key.startswith('REPLACE_'):
+                    self.replacements[key] = value
+                self._collect_replacements(value)
+        elif isinstance(data, list):
+            for item in data:
+                self._collect_replacements(item)
 
     def _load_agents(self):
         agents = CfgConfig()
         self._load_markdown_agents(self.AGENTS_DIR, agents)
         return agents
 
+    def _apply_replacements(self, content):
+        if not hasattr(self, 'replacements') or not self.replacements:
+            return content
+        for key, value in self.replacements.items():
+            if isinstance(value, list):
+                replacement = ', '.join(str(v) for v in value)
+            else:
+                replacement = str(value)
+            content = content.replace(key, replacement)
+        return content
+
     def _load_markdown_agents(self, agents_dir, agents):
-        for md_file in agents_dir.glob('*.md'):
+        for md_file in agents_dir.rglob('*.md'):
             with open(md_file, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
+                content = self._apply_replacements(content)
                 setattr(agents, md_file.stem, content)
 
     @staticmethod
@@ -313,3 +478,7 @@ def get_example_config():
             'details': {'logs': ['error.log', 'access.log'], 'retention': 30}
         }
     }
+
+if __name__ == "__main__":
+    cfg.display()
+
