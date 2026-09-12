@@ -3,6 +3,7 @@ import logging
 import yaml
 import shutil
 from enum import Enum
+import json
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
@@ -142,12 +143,13 @@ class CfgConfig(SimpleNamespace):
         return getattr(self, key, default)
 
     def display(self, indent=0):
-        import json
-        from pathlib import Path
-        
         def make_serializable(obj):
             if isinstance(obj, Path):
                 return str(obj)
+            elif isinstance(obj, type) and issubclass(obj, Enum):
+                return str(obj)
+            elif isinstance(obj, Enum):
+                return obj.name
             elif isinstance(obj, (CfgConfig, SimpleNamespace)):
                 return {k: make_serializable(v) for k, v in vars(obj).items()}
             elif isinstance(obj, list):
@@ -158,6 +160,7 @@ class CfgConfig(SimpleNamespace):
         
         serializable = make_serializable(self.to_dict())
         print(json.dumps(serializable, indent=2, ensure_ascii=False))
+
 
 
 class ConfManager:
