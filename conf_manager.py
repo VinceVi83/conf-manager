@@ -15,21 +15,6 @@ from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
 
-class ReturnCode(Enum):
-    SUCCESS = 1
-    ERR = 2
-    ERR_NOT_CONNECTED = 3
-    ERR_NOT_IMPLEMENTED = 4
-    SUCCESS_NOTHING_TO_DO = 5
-    ERR_UNKNOWN_DEVICE = 6
-    ERR_INVALID_ARGUMENT = 7
-    ERR_NOT_CONFIGURED = 8
-    ERR_MISSING_FILE = 9
-    SUCCESS_NONSENSE = 10
-    NULL = 11
-    DUPLICATE = 12
-    ERR_FILE_NOT_FOUND = 13
-
 class CfgConfig(SimpleNamespace):
     """
     Configuration container built on SimpleNamespace with dict-like access support.
@@ -159,7 +144,7 @@ class CfgConfig(SimpleNamespace):
             return obj
         
         serializable = make_serializable(self.to_dict())
-        print(json.dumps(serializable, indent=2, ensure_ascii=False))
+        logger.info(json.dumps(serializable, indent=2, ensure_ascii=False))
 
 
 
@@ -207,7 +192,6 @@ class ConfManager:
         self.cfg.project_dir = self.project_root
         self.cfg.config_dir = self.BASE_DIR
         self.cfg.lanip = Utils.get_local_ip()
-        self.cfg.RETURN_CODE = ReturnCode
 
     def _merge_all_configs(self):
         merged_config = {}
