@@ -8,7 +8,7 @@ import requests
 try:
     from common.conf_manager import cfg, setup_logging # type: ignore
 except ImportError:
-    from conf_manager import cfg, setup_logging
+    from conf_manager import cfg, setup_logging # type: ignore
 import threading
 import logging
 

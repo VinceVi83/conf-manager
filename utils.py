@@ -1,4 +1,14 @@
 import socket
+try:
+    from common.conf_manager import cfg, setup_logging # type: ignore
+except ImportError:
+    from conf_manager import cfg, setup_logging # type: ignore
+
+import threading
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Utils:
     """
@@ -30,6 +40,18 @@ class Utils:
         return current
 
     @staticmethod
+    def format_result(result):
+        if isinstance(result, dict):
+            try:
+                formatted_items = []
+                for k, v in result.items():
+                    formatted_items.append(f"{k}:{v}")
+                return ",".join(formatted_items)
+            except Exception:
+                return str(result)
+        return str(result)
+
+    @staticmethod
     def get_local_ip():
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -40,3 +62,25 @@ class Utils:
         except Exception:
             return '127.0.0.1'
 
+    @staticmethod
+    def send_discord_notification(message, channel=None, files=None):
+        if getattr(cfg, 'discord', None) is None:
+            logger.info("Discord not configured")
+            return
+        def post_request():
+            try:
+                if channel is not None:
+                    channel_name = channel
+                else:
+                    channel_name = cfg.discord.channel
+                payload = {
+                    "channel_name": channel_name,
+                    "msg": message,
+                    "attachments": files if files else []
+                }
+                requests.post(f"http://{cfg.discord.host}:{cfg.discord.port}/send",
+                              json=payload,
+                              timeout=5)
+            except Exception as e:
+                pass
+        threading.Thread(target=post_request, daemon=False).start()
