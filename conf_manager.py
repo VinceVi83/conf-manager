@@ -168,12 +168,12 @@ class ConfManager:
         # WARNING: self.cfg should be used as read-only, do not modify attributes after loading
     """
 
-    def __init__(self, standalone=False):
-        if standalone:
-            self.cfg = self.dict_to_namespace(get_example_config())
-            return
+    def __init__(self, standalone=True):
+        if Path(__file__).resolve().parent.name == 'common':
+            self.project_root = Path(__file__).resolve().parent.parent
+        else:
+            self.project_root = Path(__file__).resolve().parent
 
-        self.project_root = Path(__file__).resolve().parent.parent
         self.dir_name = self.project_root.name
         self.BASE_DIR = Path.home() / 'Documents' / self.dir_name
         self.AGENTS_DIR = self.BASE_DIR / 'agents'
@@ -310,7 +310,8 @@ class ConfManager:
             if config_files_exist:
                 self._update_configs_and_agents()
             else:
-                self._create_default_config()
+                if not self.CONFIG_FILE.exists():
+                    self._create_default_config()
                 self._update_configs_and_agents()
 
     def _create_default_config(self):
