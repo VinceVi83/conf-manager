@@ -89,6 +89,66 @@ class Utils:
                 logger.error(f"Discord notification failed: {e}")
         threading.Thread(target=post_request, daemon=False).start()
 
+    @staticmethod
+    def str_to_dict(json_str):
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Err JSON parseing: {e}")
+            return None
+
+    @staticmethod
+    def add_cron_task(task_id: str, function: str, date_or_timestamp, description: str = "", args: list = None, hidden: str = "yes"):
+        try:
+            url = f"https://{cfg.agenda_task.host}:{cfg.agenda_task.port}/tasks"
+            payload = {
+                "id": task_id,
+                "function": function,
+                "trigger_type": "date",
+                "description": description,
+                "cron": cron_param,
+                "run_date": None,
+                "args": args if args else [],
+                "status": "active",
+                "state": "active",
+                "skip_next": [],
+                "hidden": hidden
+            }
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            response = requests.post(url, json=payload, timeout=5, verify=False)
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to add oneshot task {task_id}: {str(e)}")
+            return {"success": False, "message": str(e)}
+
+    @staticmethod
+    def add_oneshot_task(task_id: str, function: str, date_or_timestamp, description: str = "", args: list = None, hidden: str = "yes"):
+        try:
+            if isinstance(date_or_timestamp, (int, float)):
+                run_date_str = datetime.fromtimestamp(date_or_timestamp).isoformat()
+            else:
+                run_date_str = str(date_or_timestamp)
+            url = f"https://{cfg.agenda_task.host}:{cfg.agenda_task.port}/tasks"
+            payload = {
+                "id": task_id,
+                "function": function,
+                "trigger_type": "date",
+                "description": description,
+                "cron": None,
+                "run_date": run_date_str,
+                "args": args if args else [],
+                "status": "active",
+                "state": "active",
+                "skip_next": [],
+                "hidden": hidden
+            }
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            response = requests.post(url, json=payload, timeout=5, verify=False)
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to add oneshot task {task_id}: {str(e)}")
+            return {"success": False, "message": str(e)}
+
 class CfgConfig(SimpleNamespace):
     """
     Configuration container built on SimpleNamespace with dict-like access support.
