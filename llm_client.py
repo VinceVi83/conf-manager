@@ -121,6 +121,7 @@ class OllamaServiceAsync:
 
     def __init__(self, url):
         self.url = url
+        self.has_whisper = False
         self.client = AsyncClient(host=self.url)
 
     async def generate(self, config):
@@ -172,6 +173,7 @@ class OllamaService:
         self.client_wan = Client(host=self.wan_url) if self.wan_url else None
         self.is_ready = False
         self.wan_available = False
+        self.has_whisper = False
         self._interrupt_monitor = threading.Event()
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
@@ -277,6 +279,7 @@ class LLMGatewayClient:
         self.timeout = timeout
         self.session = requests.Session()
         self.wan_available = True
+        self.has_whisper = True
 
     def _tcp_check(self):
         try:
@@ -344,6 +347,26 @@ class LLMGatewayClient:
         self._notify_wol_success()
         return self.generate(config)
 
+    def transcribe(self, audio_url):
+        if self._tcp_check():
+            logger.info("[LLMGatewayClient] AI PC reachable, sending directly...")
+            return self._do_transcribe(audio_url)
+        self._send_wol()
+        if not self._wait_for_wakeup():
+            raise TimeoutError("AI PC not responding after WOL.")
+        self._notify_wol_success()
+        return self._do_transcribe(audio_url)
+
+    def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None):
+        if self._tcp_check():
+            logger.info("[LLMGatewayClient] AI PC reachable, sending directly...")
+            return self._do_transcribe_and_call(audio_url, system_prompt, model, options)
+        self._send_wol()
+        if not self._wait_for_wakeup():
+            raise TimeoutError("AI PC not responding after WOL.")
+        self._notify_wol_success()
+        return self._do_transcribe_and_call(audio_url, system_prompt, model, options)
+
     def list(self):
         try:
             resp = self.session.get(f"{self.base_url}/models", timeout=5)
@@ -352,6 +375,48 @@ class LLMGatewayClient:
         except Exception as e:
             logger.error(f"[LLMGatewayClient] Failed to list models: {e}")
             return {"error": f"LIST_MODELS_FAILED: {e}"}
+
+    def _do_transcribe(self, audio_url):
+        try:
+            payload = {
+                "system_prompt": "",
+                "prompt": "",
+                "model": "",
+                "options": {},
+                "audio_url": audio_url,
+                "audio_language": "fr"
+            }
+            resp = self.session.post(
+                f"{self.base_url}/transcribe",
+                json=payload,
+                timeout=300
+            )
+            resp.raise_for_status()
+            return {"content": resp.json().get("result", "")}
+        except Exception as e:
+            logger.error(f"[LLMGatewayClient] Transcribe failed: {e}")
+            return {"content": str(e), "error": f"TRANSCRIBE_FAILED: {e}"}
+
+    def _do_transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None):
+        try:
+            payload = {
+                "system_prompt": system_prompt,
+                "prompt": "",
+                "model": model or "",
+                "options": options or {},
+                "audio_url": audio_url,
+                "audio_language": "fr"
+            }
+            resp = self.session.post(
+                f"{self.base_url}/transcribe-and-call",
+                json=payload,
+                timeout=300
+            )
+            resp.raise_for_status()
+            return {"content": resp.json().get("result", "")}
+        except Exception as e:
+            logger.error(f"[LLMGatewayClient] Transcribe+Call failed: {e}")
+            return {"content": str(e), "error": f"TRANSCRIBE_CALL_FAILED: {e}"}
 
 class LLMGatewayClientAsync:
     """
@@ -373,6 +438,7 @@ class LLMGatewayClientAsync:
     """
     def __init__(self, server_ip, port, server_mac, wakeup_port):
         self._sync = LLMGatewayClient(server_ip, port, server_mac, wakeup_port)
+        self.has_whisper = True
 
     async def generate(self, config_obj):
         return await asyncio.to_thread(self._sync.generate, config_obj)
@@ -386,6 +452,15 @@ class LLMGatewayClientAsync:
             mode=mode
         )
         return await self.generate(config)
+
+    async def transcribe(self, audio_url):
+        return await asyncio.to_thread(self._sync.transcribe, audio_url)
+
+    async def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None):
+        return await asyncio.to_thread(self._sync.transcribe_and_call, audio_url, system_prompt, model, options)
+
+    async def list(self):
+        return await asyncio.to_thread(self._sync.list)
 
 def init_llm_service():
     try:
@@ -455,3 +530,4 @@ if __name__ == "__main__":
 
     test_llm_call()
     asyncio.run(test_llm_call_async())
+
