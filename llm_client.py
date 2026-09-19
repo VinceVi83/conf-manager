@@ -58,9 +58,12 @@ def get_llm_config(mode: str = 'instruct'):
             'model': 'qwen3.8:27b',
             'options': {
                 'num_predict': 4096,
-                'temperature': 1.2,
-                'top_p': 0.95,
-                'repeat_penalty': 1.1
+                'temperature': 0.1,
+                'top_p': 0.5,
+                'top_k': 10,
+                'repeat_penalty': 1.5,
+                'presence_penalty': 0.5,
+                'frequency_penalty': 0.5
             }
         }
     }
@@ -124,14 +127,14 @@ class OllamaServiceAsync:
         self.has_whisper = False
         self.client = AsyncClient(host=self.url)
 
-    async def generate(self, config):
+    async def generate(self, config, timeout=120):
         try:
             response = await self.client.chat(**config.get_payload())
             return _process_llm_result(response)
         except Exception as e:
             return {"content": str(e), "error": f"LLM_CALL_FAILED: {str(e)}"}
 
-    async def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct'):
+    async def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct', timeout=120):
         config = LLMRequest(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -174,6 +177,7 @@ class OllamaService:
         self.is_ready = False
         self.wan_available = False
         self.has_whisper = False
+        self.timeout = 120
         self._interrupt_monitor = threading.Event()
         threading.Thread(target=self._monitor_loop, daemon=True).start()
 
@@ -205,7 +209,7 @@ class OllamaService:
             self._interrupt_monitor.wait(timeout=wait_time)
             self._interrupt_monitor.clear()
 
-    def generate(self, config_obj):
+    def generate(self, config_obj, timeout=120):
         payload = config_obj.get_payload()
         logger.info(f"Payload: {payload}")
         if self.wan_available and self.client_wan:
@@ -235,7 +239,7 @@ class OllamaService:
                 return _process_llm_result(resp)
             raise e
 
-    def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct'):
+    def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct', timeout=120):
         config = LLMRequest(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -285,7 +289,7 @@ class LLMGatewayClient:
         try:
             with socket.create_connection((self.server_ip, self.wakeup_port), timeout=1):
                 return True
-        except (socket.timeout, ConnectionRefusedError, OSError):
+        except (120, ConnectionRefusedError, OSError):
             return False
 
     def _send_wol(self):
@@ -315,7 +319,7 @@ class LLMGatewayClient:
             time.sleep(1)
         return False
 
-    def generate(self, config_obj) -> Dict:
+    def generate(self, config_obj, timeout=120) -> Dict:
         p = config_obj.get_payload()
         payload = {
             "system_prompt": p['messages'][0]['content'],
@@ -324,13 +328,13 @@ class LLMGatewayClient:
             "options": p['options']
         }
         try:
-            resp = self.session.post(f"{self.base_url}/call-llm", json=payload, timeout=self.timeout)
+            resp = self.session.post(f"{self.base_url}/call-llm", json=payload, timeout=timeout)
             resp.raise_for_status()
             return {"content": resp.json().get("result", "")}
         except Exception as e:
             return {"content": str(e), "error": f"GATEWAY_FAILED: {e}"}
 
-    def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct'):
+    def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct', timeout=120):
         config = LLMRequest(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -345,7 +349,7 @@ class LLMGatewayClient:
         if not self._wait_for_wakeup():
             raise TimeoutError("AI PC not responding after WOL.")
         self._notify_wol_success()
-        return self.generate(config)
+        return self.generate(config, timeout=timeout)
 
     def transcribe(self, audio_url):
         if self._tcp_check():
@@ -357,15 +361,15 @@ class LLMGatewayClient:
         self._notify_wol_success()
         return self._do_transcribe(audio_url)
 
-    def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None):
+    def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None, mode='instruct', timeout=120):
         if self._tcp_check():
             logger.info("[LLMGatewayClient] AI PC reachable, sending directly...")
-            return self._do_transcribe_and_call(audio_url, system_prompt, model, options)
+            return self._do_transcribe_and_call(audio_url, system_prompt, model, options, timeout=timeout)
         self._send_wol()
         if not self._wait_for_wakeup():
             raise TimeoutError("AI PC not responding after WOL.")
         self._notify_wol_success()
-        return self._do_transcribe_and_call(audio_url, system_prompt, model, options)
+        return self._do_transcribe_and_call(audio_url, system_prompt, model, options, timeout=timeout)
 
     def list(self):
         try:
@@ -397,7 +401,7 @@ class LLMGatewayClient:
             logger.error(f"[LLMGatewayClient] Transcribe failed: {e}")
             return {"content": str(e), "error": f"TRANSCRIBE_FAILED: {e}"}
 
-    def _do_transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None):
+    def _do_transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None, timeout=120):
         try:
             payload = {
                 "system_prompt": system_prompt,
@@ -410,7 +414,7 @@ class LLMGatewayClient:
             resp = self.session.post(
                 f"{self.base_url}/transcribe-and-call",
                 json=payload,
-                timeout=300
+                timeout=timeout
             )
             resp.raise_for_status()
             return {"content": resp.json().get("result", "")}
@@ -440,8 +444,8 @@ class LLMGatewayClientAsync:
         self._sync = LLMGatewayClient(server_ip, port, server_mac, wakeup_port)
         self.has_whisper = True
 
-    async def generate(self, config_obj):
-        return await asyncio.to_thread(self._sync.generate, config_obj)
+    async def generate(self, config_obj, timeout=120):
+        return await asyncio.to_thread(self._sync.generate, config_obj, timeout=timeout)
 
     async def call(self, system_prompt, user_prompt, model=None, options=None, mode='instruct'):
         config = LLMRequest(
@@ -456,8 +460,8 @@ class LLMGatewayClientAsync:
     async def transcribe(self, audio_url):
         return await asyncio.to_thread(self._sync.transcribe, audio_url)
 
-    async def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None):
-        return await asyncio.to_thread(self._sync.transcribe_and_call, audio_url, system_prompt, model, options)
+    async def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None, timeout=120):
+        return await asyncio.to_thread(self._sync.transcribe_and_call, audio_url, system_prompt, model, options, timeout=timeout)
 
     async def list(self):
         return await asyncio.to_thread(self._sync.list)
