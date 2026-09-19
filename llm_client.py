@@ -45,7 +45,7 @@ def get_llm_config(mode: str = 'instruct'):
         'summarize': {
             'model': 'qwen2.5:3b',
             'options': {
-                'num_predict': 512,
+                'num_predict': 4096,
                 'temperature': 0.1,
                 'top_p': 0.5,
                 'top_k': 10,
@@ -55,9 +55,9 @@ def get_llm_config(mode: str = 'instruct'):
             }
         },
         'creative': {
-            'model': 'qwen2.5:7b',
+            'model': 'qwen3.8:27b',
             'options': {
-                'num_predict': 512,
+                'num_predict': 4096,
                 'temperature': 1.2,
                 'top_p': 0.95,
                 'repeat_penalty': 1.1

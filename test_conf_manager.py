@@ -3,11 +3,9 @@ from pathlib import Path
 
 project_root = Path(__file__).parent.parent
 if (project_root / 'config_example.yaml').exists():
-    from .conf_manager import cfg
-    from .utils import Utils
+    from .conf_manager import cfg, Utils
 else:
-    from conf_manager import ConfManager
-    from utils import Utils
+    from conf_manager import ConfManager, Utils
     cfg = ConfManager(standalone=True).cfg
 
 def test_conf_manager():
