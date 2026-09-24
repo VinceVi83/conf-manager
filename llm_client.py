@@ -343,7 +343,7 @@ class LLMGatewayClient:
             mode=mode
         )
         if self._tcp_check():
-            logger.info("[LLMGatewayClient] AI PC reachable, sending request directly...")
+            logger.debug("[LLMGatewayClient] AI PC reachable, sending request directly...")
             return self.generate(config)
         self._send_wol()
         if not self._wait_for_wakeup():
@@ -353,7 +353,7 @@ class LLMGatewayClient:
 
     def transcribe(self, audio_url):
         if self._tcp_check():
-            logger.info("[LLMGatewayClient] AI PC reachable, sending directly...")
+            logger.debug("[LLMGatewayClient] AI PC reachable, sending directly...")
             return self._do_transcribe(audio_url)
         self._send_wol()
         if not self._wait_for_wakeup():
@@ -363,7 +363,7 @@ class LLMGatewayClient:
 
     def transcribe_and_call(self, audio_url, system_prompt="", model=None, options=None, mode='instruct', timeout=120):
         if self._tcp_check():
-            logger.info("[LLMGatewayClient] AI PC reachable, sending directly...")
+            logger.debug("[LLMGatewayClient] AI PC reachable, sending directly...")
             return self._do_transcribe_and_call(audio_url, system_prompt, model, options, timeout=timeout)
         self._send_wol()
         if not self._wait_for_wakeup():
