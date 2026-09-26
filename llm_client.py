@@ -275,7 +275,7 @@ class LLMGatewayClient:
         client = LLMGatewayClient("192.168.1.100", 8000, "aa:bb:cc:dd:ee:ff", 9)
         result = client.call("You are helpful", "Hello")
     """
-    def __init__(self, server_ip, port, server_mac, wakeup_port, timeout=120):
+    def __init__(self, server_ip, port, server_mac, wakeup_port, timeout=120, async_llm=False):
         self.base_url = f"http://{server_ip}:{port}"
         self.server_ip = server_ip
         self.server_mac = server_mac
@@ -284,12 +284,27 @@ class LLMGatewayClient:
         self.session = requests.Session()
         self.wan_available = True
         self.has_whisper = True
+        self.llm_backup = None
+        self.init_backup = False
+        self._init_backup(async_llm=async_llm)
+
+    def _init_backup(self, async_llm=False):
+        lan_url_cfg = getattr(cfg, "llm", None)
+        if lan_url_cfg is not None:
+            base_url = getattr(cfg.llm, "local_url", "http://127.0.0.1:11434")
+            if async_llm:
+                self.llm_backup = OllamaServiceAsync(base_url)
+            else:
+                self.llm_backup = OllamaService(base_url)
+
+            logger.info(f"Ollama connected on {base_url} (async={async_llm})")
+            self.init_backup = True
 
     def _tcp_check(self):
         try:
             with socket.create_connection((self.server_ip, self.wakeup_port), timeout=1):
                 return True
-        except (120, ConnectionRefusedError, OSError):
+        except (ConnectionRefusedError, OSError):
             return False
 
     def _send_wol(self):
@@ -347,7 +362,9 @@ class LLMGatewayClient:
             return self.generate(config)
         self._send_wol()
         if not self._wait_for_wakeup():
-            raise TimeoutError("AI PC not responding after WOL.")
+            if self.init_backup and self.llm_backup is not None:
+                logger.warning("AI PC not responding after WOL. Using backup.")
+                return self.llm_backup.call(system_prompt, user_prompt, model='qwen2.5:3b', options=options, mode=mode, timeout=120)
         self._notify_wol_success()
         return self.generate(config, timeout=timeout)
 
@@ -441,7 +458,7 @@ class LLMGatewayClientAsync:
         result = await client.call("You are helpful", "Hello")
     """
     def __init__(self, server_ip, port, server_mac, wakeup_port):
-        self._sync = LLMGatewayClient(server_ip, port, server_mac, wakeup_port)
+        self._sync = LLMGatewayClient(server_ip, port, server_mac, wakeup_port, async_llm=True)
         self.has_whisper = True
 
     async def generate(self, config_obj, timeout=120):
