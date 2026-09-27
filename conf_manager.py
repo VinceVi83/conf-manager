@@ -392,11 +392,24 @@ class ConfManager:
 
             for item in agents_dir.iterdir():
                 if item.is_file() and item.suffix == '.md':
-                    new_name = prefix + item.name
-                    shutil.copy2(item, self.AGENTS_DIR / new_name)
+                    dest = self.AGENTS_DIR / (prefix + item.name)
+                    if dest.exists():
+                        logger.info(f"Agent already present, keep : {dest.name}")
+                        continue
+                    shutil.copy2(item, dest)
                 elif item.is_dir():
-                    new_dir_name = prefix + item.name
-                    shutil.copytree(item, self.AGENTS_DIR / new_dir_name)
+                    dest = self.AGENTS_DIR / (prefix + item.name)
+                    if not dest.exists():
+                        shutil.copytree(item, dest)
+                        continue
+                    for src_file in item.rglob('*.md'):
+                        rel = src_file.relative_to(item)
+                        target = dest / rel
+                        if target.exists():
+                            logger.info(f"Agent already present, keep : {target.name}")
+                            continue
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src_file, target)
 
     def _load_user_configs(self):
         users_dir = self.BASE_DIR / 'users'
