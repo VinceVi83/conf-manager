@@ -6,6 +6,7 @@ from enum import Enum
 import json
 import threading
 import requests
+import secrets
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
@@ -148,6 +149,63 @@ class Utils:
         except Exception as e:
             logger.error(f"Failed to add oneshot task {task_id}: {str(e)}")
             return {"success": False, "message": str(e)}
+
+    @staticmethod
+    def create_vocal(text):
+        base = cfg.sys.tts.rstrip("/")
+        try:
+            r = requests.post(
+                f"{base}/audio_query",
+                params={"text": text, "speaker": 3},
+                timeout=10,
+            )
+            r.raise_for_status()
+            q = r.json()
+
+            r = requests.post(
+                f"{base}/synthesis",
+                params={"speaker": 3},
+                json=q,
+                timeout=30,
+            )
+            r.raise_for_status()
+            wav = r.content
+        except requests.RequestException:
+            logger.exception("create_vocal failed")
+            raise
+
+        path = f"/tmp/vocal_{secrets.token_hex(8)}.wav"
+        with open(path, "wb") as f:
+            f.write(wav)
+        logger.info(f"Vocal written: {path} ({len(wav)} bytes)")
+        return path
+
+    @staticmethod
+    def play_announcement(file_path, location=None):
+        try:
+            payload = {
+                "file_path": file_path,
+                "location": location
+            }
+            response = requests.post(
+                f"http://{cfg.multiroom.host}:{cfg.multiroom.port}/announcement",
+                json=payload,
+                timeout=15
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"play_announcement failed: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    @staticmethod
+    def send_command_multiroom(username: str, command: str, origin: str = None):
+        resp = requests.post(
+            f"http://{cfg.multiroom.host}:{cfg.multiroom.port}/command",
+            json={"username": username, "command": command, "origin": origin}
+        )
+        resp.raise_for_status()
+        logger.info(resp.json())
 
 class CfgConfig(SimpleNamespace):
     """
@@ -616,4 +674,5 @@ def get_example_config():
 
 if __name__ == "__main__":
     cfg.display()
+    # path = Utils.create_vocal("test")
 
