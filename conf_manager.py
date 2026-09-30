@@ -3,6 +3,7 @@ import logging
 import yaml
 import shutil
 from enum import Enum
+import socket
 import json
 import threading
 import requests
@@ -101,7 +102,7 @@ class Utils:
             return None
 
     @staticmethod
-    def add_cron_task(task_id: str, function: str, date_or_timestamp, description: str = "", args: list = None, hidden: str = "yes"):
+    def add_cron_task(task_id: str, function: str, cron_param, description: str = "", args: list | None = None, hidden: str = "yes"):
         try:
             url = f"https://{cfg.agenda_task.host}:{cfg.agenda_task.port}/tasks"
             payload = {
