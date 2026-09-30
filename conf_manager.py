@@ -70,6 +70,18 @@ class Utils:
             return '127.0.0.1'
 
     @staticmethod
+    def get_server_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        except Exception:
+            ip = "127.0.0.1"
+        finally:
+            s.close()
+        return ip
+
+    @staticmethod
     def send_discord_notification(message, channel=None, files=None):
         if getattr(cfg, 'discord', None) is None:
             logger.info("Discord not configured")
