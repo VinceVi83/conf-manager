@@ -552,4 +552,5 @@ if __name__ == "__main__":
 
     test_llm_call()
     asyncio.run(test_llm_call_async())
-
+    # stt = llm.transcribe("https://cdn.discordapp.com/attachments/1612/18903/voice-message.ogg?backend=bex=6ab51&is=6aad1&hm=a60114952309f&")
+    # logger.info(f'{stt}')
