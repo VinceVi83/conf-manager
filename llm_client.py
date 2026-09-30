@@ -330,6 +330,7 @@ class LLMGatewayClient:
         start_time = time.time()
         while time.time() - start_time < 60:
             if self._tcp_check():
+                time.sleep(5)
                 return True
             time.sleep(1)
         return False
