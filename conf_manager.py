@@ -126,7 +126,7 @@ class Utils:
             return {"success": False, "message": str(e)}
 
     @staticmethod
-    def add_oneshot_task(task_id: str, function: str, date_or_timestamp, description: str = "", args: list = None, hidden: str = "yes"):
+    def add_oneshot_task(task_id: str, function: str, date_or_timestamp, description: str = "", args: list | None = None, hidden: str = "yes"):
         try:
             if isinstance(date_or_timestamp, (int, float)):
                 run_date_str = datetime.fromtimestamp(date_or_timestamp).isoformat()
@@ -202,7 +202,7 @@ class Utils:
             return {"status": "error", "message": str(e)}
     
     @staticmethod
-    def send_command_multiroom(username: str, command: str, origin: str = None):
+    def send_command_multiroom(username: str, command: str, origin: str | None = None):
         resp = requests.post(
             f"http://{cfg.multiroom.host}:{cfg.multiroom.port}/command",
             json={"username": username, "command": command, "origin": origin}
