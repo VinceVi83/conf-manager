@@ -214,6 +214,27 @@ class Utils:
             return {"status": "error", "message": str(e)}
     
     @staticmethod
+    def play_text_announcement(text, lang="fren", location=None):
+        try:
+            payload = {
+                "text": text,
+                "lang": lang,
+            }
+            if location is not None:
+                payload["location"] = location
+
+            response = requests.post(
+                f"http://{cfg.multiroom.host}:{cfg.multiroom.port}/play_announcement",
+                json=payload,
+                timeout=15,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"play_text_announcement failed: {e}")
+            return {"status": "error", "message": str(e)}
+
+    @staticmethod
     def send_command_multiroom(username: str, command: str, origin: str | None = None):
         resp = requests.post(
             f"http://{cfg.multiroom.host}:{cfg.multiroom.port}/command",
