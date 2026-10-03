@@ -399,6 +399,7 @@ class ConfManager:
         self.cfg.project_dir = self.project_root
         self.cfg.config_dir = self.BASE_DIR
         self.cfg.lanip = Utils.get_local_ip()
+        self.cfg.debug = False
 
     def _merge_all_configs(self):
         merged_config = {}
