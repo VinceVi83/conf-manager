@@ -235,7 +235,7 @@ class Utils:
             return {"status": "error", "message": str(e)}
 
     @staticmethod
-    def send_command_multiroom(username: str, command: str, origin: str | None = None):
+    def send_command_multiroom(command: str, username: str = "system", origin: str | None = None):
         resp = requests.post(
             f"http://{cfg.multiroom.host}:{cfg.multiroom.port}/command",
             json={"username": username, "command": command, "origin": origin}
