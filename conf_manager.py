@@ -250,9 +250,8 @@ class Utils:
     def call_ask(request_str: str) -> str:
         async def _call():
             async with Client(f"http://{cfg.dllb_skills.host}:{cfg.dllb_skills.port}/sse") as client:
-                result = await client.call_tool("call_ask", {"request_str": request_str})
-                return result.content[0].text
-
+                r = await client.call_tool("call_ask", {"request_str": request_str})
+                return r.content[0].text
         return asyncio.run(_call())
 
 class CfgConfig(SimpleNamespace):
