@@ -242,6 +242,7 @@ class Utils:
         )
         resp.raise_for_status()
         logger.info(resp.json())
+        return resp.json()
 
 class CfgConfig(SimpleNamespace):
     """
