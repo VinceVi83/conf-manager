@@ -9,6 +9,8 @@ import threading
 import requests
 import secrets
 import urllib3
+import asyncio
+from fastmcp import Client
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -243,6 +245,15 @@ class Utils:
         resp.raise_for_status()
         logger.info(resp.json())
         return resp.json()
+
+    @staticmethod
+    def call_ask(request_str: str) -> str:
+        async def _call():
+            async with Client(f"http://{cfg.dllb_skills.host}:{cfg.dllb_skills.port}/sse") as client:
+                result = await client.call_tool("call_ask", {"request_str": request_str})
+                return result.content[0].text
+
+        return asyncio.run(_call())
 
 class CfgConfig(SimpleNamespace):
     """
@@ -712,5 +723,5 @@ def get_example_config():
 
 if __name__ == "__main__":
     cfg.display()
+    # Utils.call_ask("Eteindre la lumière dans la cuisine")
     # path = Utils.create_vocal("test")
-
